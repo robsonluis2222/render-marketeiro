@@ -28,10 +28,9 @@ COPY package*.json ./
 RUN npm ci
 
 COPY src ./src
-COPY public ./public
 COPY server.mjs ./
 
-RUN mkdir -p storage/assets public/generated
+RUN mkdir -p public storage/assets
 
 RUN npx remotion browser ensure
 

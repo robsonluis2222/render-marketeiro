@@ -18,7 +18,9 @@ const jobs = new Map();
 let bundleLocation;
 await Promise.all([fs.mkdir(GENERATED, {recursive:true}), fs.mkdir(ASSETS, {recursive:true})]);
 const app = express();
-app.use(cors());
+app.use(cors({origin:true,methods:['GET','POST','DELETE','OPTIONS'],allowedHeaders:['Content-Type','Accept']}));
+app.options('*', cors());
+app.use((req,res,next)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');res.set('Pragma','no-cache');res.set('Expires','0');next()});
 app.use(express.json({limit:'30mb'}));
 app.use('/assets', express.static(ASSETS));
 app.use('/generated', express.static(GENERATED));
@@ -41,8 +43,8 @@ async function renderJob(id, body) {
     job.status='done'; job.progress=100; job.url=`/render/${id}/file`; job.completedAt=new Date().toISOString();
   } catch (e) { job.status='failed'; job.error=e?.stack || e?.message || String(e); }
 }
-app.get('/health', (_,res)=>res.json({ok:true, renderer:'remotion', remotion: true, jobs: jobs.size}));
-app.get('/render/:id', (req,res)=>{ const j=jobs.get(req.params.id); if(!j) return res.status(404).json({success:false,message:'Render não encontrado'}); res.json({success:j.status!=='failed', response:{id:req.params.id,status:j.status,progress:j.progress||0,url:j.url,error:j.error||null}}); });
+app.get('/health', (_,res)=>{res.set('Cache-Control','no-store');return res.json({ok:true, renderer:'remotion', remotion: true, jobs: jobs.size});});
+app.get('/render/:id', (req,res)=>{ res.set('Cache-Control','no-store'); const j=jobs.get(req.params.id); if(!j) return res.status(404).json({success:false,message:'Render não encontrado'}); res.json({success:j.status!=='failed', response:{id:req.params.id,status:j.status,progress:j.progress||0,url:j.url,error:j.error||null}}); });
 app.get('/render/:id/file', async (req,res)=>{ const j=jobs.get(req.params.id); if(!j?.url || j.status!=='done') return res.status(409).json({message:'Render ainda não concluído'}); res.download(path.join(GENERATED,`${req.params.id}.mp4`), 'aivf-remotion.mp4'); });
 app.post('/render', async (req,res)=>{ if(!req.body?.script?.scenes?.length) return res.status(400).json({success:false,message:'script.scenes é obrigatório'}); const id=crypto.randomUUID(); jobs.set(id,{id,status:'queued',progress:0,createdAt:new Date().toISOString()}); renderJob(id,req.body); res.status(201).json({success:true,message:'Render enfileirado',response:{id}}); });
 app.get('/assets', async (_,res)=>{ const files=await fs.readdir(ASSETS); res.json({success:true,assets:files.map(name=>({id:name,name,url:`/assets/${encodeURIComponent(name)}`}))}); });
